@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Laptop, Mail, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { Eye, EyeOff, AlertCircle, Laptop, Mail, Lock } from 'lucide-react';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -25,14 +25,12 @@ export default function Login() {
     setLoading(true);
     setError('');
 
-    // Validation
     if (!formData.email || !formData.password) {
       setError('Please fill in all fields');
       setLoading(false);
       return;
     }
 
-    // Email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(formData.email)) {
       setError('Please enter a valid email address');
@@ -40,10 +38,7 @@ export default function Login() {
       return;
     }
 
-    // Simulate login - Replace with actual API call
     setTimeout(() => {
-      // For demo: accept any email/password
-      // In production, validate against backend
       localStorage.setItem('isAuthenticated', 'true');
       localStorage.setItem('userEmail', formData.email);
       setLoading(false);
@@ -52,9 +47,8 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-600 via-blue-700 to-blue-900 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        {/* Logo and Title */}
+    <div className="w-screen min-h-screen bg-gradient-to-br from-blue-600 via-blue-700 to-blue-900 flex items-center justify-center overflow-auto">
+      <div className="w-full max-w-md px-4">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-20 h-20 bg-white rounded-2xl shadow-lg mb-4">
             <Laptop size={40} className="text-blue-600" />
@@ -63,7 +57,6 @@ export default function Login() {
           <p className="text-blue-100">Inventory Management System</p>
         </div>
 
-        {/* Login Form */}
         <div className="bg-white rounded-2xl shadow-2xl p-8">
           <h2 className="text-2xl font-bold text-gray-800 mb-6">Welcome Back</h2>
 
@@ -74,7 +67,7 @@ export default function Login() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Email Address
@@ -130,25 +123,25 @@ export default function Login() {
             </div>
 
             <button
-              type="submit"
+              type="button"
+              onClick={handleSubmit}
               disabled={loading}
               className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition-colors font-semibold disabled:bg-blue-400 disabled:cursor-not-allowed"
             >
               {loading ? 'Signing in...' : 'Sign In'}
             </button>
-          </form>
 
-          <div className="mt-6 text-center">
-            <p className="text-gray-600">
-              Don't have an account?{' '}
-              <Link to="/register" className="text-blue-600 hover:text-blue-700 font-semibold">
-                Register here
-              </Link>
-            </p>
+            <div className="text-center pt-2">
+              <p className="text-gray-600">
+                Don't have an account?{' '}
+                <Link to="/register" className="text-blue-600 hover:text-blue-700 font-semibold">
+                  Register here
+                </Link>
+              </p>
+            </div>
           </div>
         </div>
 
-        {/* Footer */}
         <p className="text-center text-blue-100 text-sm mt-6">
           © 2025 Inventory Management System. All rights reserved.
         </p>
