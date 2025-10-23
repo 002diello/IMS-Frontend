@@ -131,6 +131,7 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
     { path: "/assign-return", name: "Assign & Return", icon: <FaClipboardList /> },
     { path: "/return-leasing", name: "Return Leasing", icon: <FaUndo /> },
     { path: "/repair-record", name: "Repair Record", icon: <FaWrench /> },
+    { path: "/api-test", name: "API Test", icon: <FaWrench /> },
   ];
 
   const isSidebarExpanded = sidebarOpen || isHovered;

@@ -245,6 +245,7 @@
 import { useState } from "react";
 import { BrowserRouter as Router, Routes, Route, useLocation, useNavigate, Navigate } from "react-router-dom";
 import { LayoutDashboard, Laptop, Undo2, RotateCcw, Wrench, User, LogOut, ChevronDown } from "lucide-react";
+import { AuthProvider, useAuth } from "./context/AuthContext";
 import Sidebar from "./components/Sidebar";
 import Dashboard from "./pages/Dashboard";
 import MasterLaptop from "./pages/MasterLaptop";
@@ -254,9 +255,21 @@ import RepairRecord from "./pages/RepairRecord";
 import Profile from "./pages/Profile";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import ApiTest from "./pages/ApiTest";
 
 function ProtectedRoute({ children }) {
-  const isAuthenticated = localStorage.getItem('isAuthenticated') === 'true';
+  const { isAuthenticated, loading } = useAuth();
+  
+  if (loading) {
+    return (
+      <div className="w-screen h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
   
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
@@ -296,6 +309,11 @@ const modules = {
     icon: User,
     description: "Manage your account settings",
   },
+  "/api-test": {
+    label: "API Test",
+    icon: Wrench,
+    description: "Test API endpoints",
+  },
 };
 
 function AppLayout() {
@@ -303,16 +321,15 @@ function AppLayout() {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
 
   const currentModule = modules[location.pathname] || modules["/"];
   const CurrentIcon = currentModule.icon;
-  const userName = localStorage.getItem('userName') || 'Admin User';
-  const userEmail = localStorage.getItem('userEmail') || 'admin@company.com';
+  const userName = user?.name || user?.fullName || user?.email || 'User';
+  const userEmail = user?.email || 'user@company.com';
 
   const handleLogout = () => {
-    localStorage.removeItem('isAuthenticated');
-    localStorage.removeItem('userEmail');
-    localStorage.removeItem('userName');
+    logout();
     navigate('/login');
   };
 
@@ -392,6 +409,7 @@ function AppLayout() {
             <Route path="/return-leasing" element={<ReturnLeasing />} />
             <Route path="/repair-record" element={<RepairRecord />} />
             <Route path="/profile" element={<Profile />} />
+            <Route path="/api-test" element={<ApiTest />} />
           </Routes>
         </div>
       </main>
@@ -402,18 +420,20 @@ function AppLayout() {
 export default function App() {
   return (
     <Router>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route
-          path="/*"
-          element={
-            <ProtectedRoute>
-              <AppLayout />
-            </ProtectedRoute>
-          }
-        />
-      </Routes>
+      <AuthProvider>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route
+            path="/*"
+            element={
+              <ProtectedRoute>
+                <AppLayout />
+              </ProtectedRoute>
+            }
+          />
+        </Routes>
+      </AuthProvider>
     </Router>
   );
 }

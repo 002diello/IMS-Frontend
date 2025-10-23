@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Eye, EyeOff, AlertCircle, CheckCircle, Laptop, User, Mail, Lock } from 'lucide-react';
+import api from '../api/client';
 
 export default function Register() {
   const navigate = useNavigate();
@@ -24,7 +25,7 @@ export default function Register() {
     setError('');
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
@@ -55,29 +56,31 @@ export default function Register() {
       return;
     }
 
-    setTimeout(() => {
-      const users = JSON.parse(localStorage.getItem('users') || '[]');
-      
-      if (users.some(user => user.email === formData.email)) {
-        setError('Email already registered');
-        setLoading(false);
-        return;
-      }
-
-      users.push({
-        fullName: formData.fullName,
+    try {
+      // Call backend registration API
+      await api.post('/auth/register', {
+        name: formData.fullName,
         email: formData.email,
-        createdAt: new Date().toISOString()
+        password: formData.password
       });
-      localStorage.setItem('users', JSON.stringify(users));
-      
+
       setSuccess(true);
-      setLoading(false);
       
       setTimeout(() => {
         navigate('/login');
       }, 2000);
-    }, 1000);
+    } catch (err) {
+      console.error('Registration error:', err);
+      if (err.response?.status === 409 || err.response?.status === 400) {
+        setError(err.response.data?.message || 'Email already registered');
+      } else if (err.response?.data?.message) {
+        setError(err.response.data.message);
+      } else {
+        setError('Registration failed. Please try again.');
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

@@ -1,7 +1,12 @@
-import { useState } from 'react';
-import { User, Mail, Lock, Save, Eye, EyeOff, AlertCircle, CheckCircle } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { User, Mail, Lock, Save, Eye, EyeOff, AlertCircle, CheckCircle, Shield, Calendar, Trash2, X } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
+import api from '../api/client';
 
 export default function Profile() {
+  const { user, updateUser, logout } = useAuth();
+  const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
@@ -9,14 +14,32 @@ export default function Profile() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
+  const [userDetails, setUserDetails] = useState(null);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const [formData, setFormData] = useState({
-    fullName: localStorage.getItem('userName') || 'Admin User',
-    email: localStorage.getItem('userEmail') || 'admin@company.com',
+    fullName: '',
+    email: '',
     currentPassword: '',
     newPassword: '',
     confirmPassword: ''
   });
+
+  // Fetch user details on mount
+  useEffect(() => {
+    if (user) {
+      setFormData({
+        fullName: user.name || user.fullName || '',
+        email: user.email || '',
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: ''
+      });
+      setUserDetails(user);
+    }
+  }, [user]);
 
   const handleChange = (e) => {
     setFormData({
@@ -27,7 +50,7 @@ export default function Profile() {
     setSuccess('');
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setLoading(true);
     setError('');
     setSuccess('');
@@ -68,10 +91,34 @@ export default function Profile() {
       }
     }
 
-    // Simulate save - Replace with actual API call
-    setTimeout(() => {
-      localStorage.setItem('userName', formData.fullName);
-      localStorage.setItem('userEmail', formData.email);
+    try {
+      // Prepare update data
+      const updateData = {
+        name: formData.fullName,
+        email: formData.email
+      };
+
+      // Add password if changing
+      if (formData.newPassword) {
+        updateData.password = formData.newPassword;
+      }
+
+      // Call backend API to update user
+      const response = await api.put(`/users/${user.id}`, updateData);
+      
+      // Update AuthContext with new user data
+      updateUser({
+        ...user,
+        name: formData.fullName,
+        email: formData.email
+      });
+
+      // Update local state
+      setUserDetails({
+        ...userDetails,
+        name: formData.fullName,
+        email: formData.email
+      });
       
       // Clear password fields
       setFormData({
@@ -82,19 +129,23 @@ export default function Profile() {
       });
 
       setSuccess('Profile updated successfully!');
-      setLoading(false);
       setIsEditing(false);
 
       setTimeout(() => {
         setSuccess('');
       }, 3000);
-    }, 1000);
+    } catch (err) {
+      console.error('Update error:', err);
+      setError(err.response?.data?.message || 'Failed to update profile');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleCancel = () => {
     setFormData({
-      fullName: localStorage.getItem('userName') || 'Admin User',
-      email: localStorage.getItem('userEmail') || 'admin@company.com',
+      fullName: user?.name || user?.fullName || '',
+      email: user?.email || '',
       currentPassword: '',
       newPassword: '',
       confirmPassword: ''
@@ -102,6 +153,48 @@ export default function Profile() {
     setError('');
     setSuccess('');
     setIsEditing(false);
+  };
+
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  };
+
+  const getRoleBadgeColor = (role) => {
+    switch (role?.toUpperCase()) {
+      case 'ADMIN':
+        return 'bg-purple-100 text-purple-800';
+      case 'STAFF':
+        return 'bg-blue-100 text-blue-800';
+      case 'USER':
+        return 'bg-gray-100 text-gray-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmText !== 'DELETE') {
+      setError('Please type DELETE to confirm');
+      return;
+    }
+
+    setDeleteLoading(true);
+    setError('');
+
+    try {
+      // Call backend API to delete user account
+      await api.delete(`/users/${user.id}`);
+
+      // Logout and redirect to login
+      logout();
+      navigate('/login');
+    } catch (err) {
+      console.error('Delete account error:', err);
+      setError(err.response?.data?.message || 'Failed to delete account');
+      setDeleteLoading(false);
+    }
   };
 
   return (
@@ -300,22 +393,132 @@ export default function Profile() {
 
       {/* Account Info */}
       <div className="bg-white rounded-lg shadow-md p-6">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">Account Information</h3>
+        <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+          <Shield size={20} className="text-blue-600" />
+          Account Information
+        </h3>
         <div className="space-y-3 text-sm">
-          <div className="flex justify-between py-2 border-b border-gray-100">
-            <span className="text-gray-600">Account Status</span>
+          <div className="flex justify-between items-center py-2 border-b border-gray-100">
+            <span className="text-gray-600 flex items-center gap-2">
+              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+              Account Status
+            </span>
             <span className="font-medium text-green-600">Active</span>
           </div>
-          <div className="flex justify-between py-2 border-b border-gray-100">
-            <span className="text-gray-600">Role</span>
-            <span className="font-medium text-gray-800">Administrator</span>
+          <div className="flex justify-between items-center py-2 border-b border-gray-100">
+            <span className="text-gray-600">User ID</span>
+            <span className="font-medium text-gray-800">#{userDetails?.id || 'N/A'}</span>
           </div>
-          <div className="flex justify-between py-2 border-b border-gray-100">
-            <span className="text-gray-600">Member Since</span>
-            <span className="font-medium text-gray-800">January 2025</span>
+          <div className="flex justify-between items-center py-2 border-b border-gray-100">
+            <span className="text-gray-600">Role</span>
+            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getRoleBadgeColor(userDetails?.role)}`}>
+              {userDetails?.role || 'USER'}
+            </span>
+          </div>
+          <div className="flex justify-between items-center py-2 border-b border-gray-100">
+            <span className="text-gray-600 flex items-center gap-2">
+              <Calendar size={16} />
+              Member Since
+            </span>
+            <span className="font-medium text-gray-800">
+              {formatDate(userDetails?.createdAt) || 'Recently joined'}
+            </span>
           </div>
         </div>
       </div>
+
+      {/* Danger Zone */}
+      <div className="bg-white rounded-lg shadow-md p-6 border-2 border-red-200">
+        <h3 className="text-lg font-semibold text-red-600 mb-2 flex items-center gap-2">
+          <AlertCircle size={20} />
+          Danger Zone
+        </h3>
+        <p className="text-sm text-gray-600 mb-4">
+          Once you delete your account, there is no going back. Please be certain.
+        </p>
+        <button
+          onClick={() => setShowDeleteDialog(true)}
+          className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2"
+        >
+          <Trash2 size={18} />
+          Delete Account
+        </button>
+      </div>
+
+      {/* Delete Confirmation Dialog */}
+      {showDeleteDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold text-red-600 flex items-center gap-2">
+                <AlertCircle size={24} />
+                Delete Account
+              </h3>
+              <button
+                onClick={() => {
+                  setShowDeleteDialog(false);
+                  setDeleteConfirmText('');
+                  setError('');
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="mb-4">
+              <p className="text-gray-700 mb-4">
+                This action <strong>cannot be undone</strong>. This will permanently delete your account and remove all your data from our servers.
+              </p>
+              
+              {error && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
+                  <AlertCircle size={20} />
+                  <span className="text-sm">{error}</span>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Type <span className="font-bold text-red-600">DELETE</span> to confirm:
+                </label>
+                <input
+                  type="text"
+                  value={deleteConfirmText}
+                  onChange={(e) => {
+                    setDeleteConfirmText(e.target.value);
+                    setError('');
+                  }}
+                  placeholder="Type DELETE"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowDeleteDialog(false);
+                  setDeleteConfirmText('');
+                  setError('');
+                }}
+                disabled={deleteLoading}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteAccount}
+                disabled={deleteLoading || deleteConfirmText !== 'DELETE'}
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-2 disabled:bg-red-400 disabled:cursor-not-allowed"
+              >
+                <Trash2 size={18} />
+                {deleteLoading ? 'Deleting...' : 'Delete Account'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

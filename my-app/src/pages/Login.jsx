@@ -1,9 +1,12 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Eye, EyeOff, AlertCircle, Laptop, Mail, Lock } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import api from '../api/client';
 
 export default function Login() {
   const navigate = useNavigate();
+  const { login } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
     email: '',
@@ -20,7 +23,7 @@ export default function Login() {
     setError('');
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
@@ -38,12 +41,38 @@ export default function Login() {
       return;
     }
 
-    setTimeout(() => {
-      localStorage.setItem('isAuthenticated', 'true');
-      localStorage.setItem('userEmail', formData.email);
-      setLoading(false);
+    try {
+      // Call backend login API
+      const response = await api.post('/auth/login', {
+        email: formData.email,
+        password: formData.password
+      });
+
+      const { token, user } = response.data;
+
+      // Store auth data using AuthContext
+      login(token, user);
+
+      // Also store for backward compatibility with existing code
+      localStorage.setItem('userEmail', user.email);
+      localStorage.setItem('userName', user.name || user.fullName || user.email);
+
+      // Navigate to dashboard
       navigate('/');
-    }, 1000);
+    } catch (err) {
+      console.error('Login error:', err);
+      if (err.response?.status === 401) {
+        setError('Invalid email or password');
+      } else if (err.response?.status === 403) {
+        setError('Account is disabled or not authorized');
+      } else if (err.response?.data?.message) {
+        setError(err.response.data.message);
+      } else {
+        setError('Login failed. Please try again.');
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
