@@ -1,16 +1,43 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Laptop, Users, PackageOpen, CheckCircle, XCircle, TrendingUp, Activity } from 'lucide-react';
+import api from '../api/client';
 
 export default function Dashboard() {
-  // Mock data - replace with real data from your backend
-  const [stats] = useState({
-    totalLaptops: 50,
-    assignedLaptops: 35,
-    unassignedLaptops: 15,
-    activeUsers: 35,
-    inRepair: 3,
-    availableForAssignment: 12
-  });
+  const [laptops, setLaptops] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  // Fetch laptops data from backend
+  useEffect(() => {
+    fetchLaptops();
+    
+    // Auto-refresh every 30 seconds
+    const interval = setInterval(fetchLaptops, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const fetchLaptops = async () => {
+    try {
+      const response = await api.get('/laptops');
+      setLaptops(response.data);
+      setError('');
+    } catch (err) {
+      console.error('Error fetching laptops:', err);
+      setError('Failed to load dashboard data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Calculate real-time stats from laptop data
+  const stats = {
+    totalLaptops: laptops.length,
+    assignedLaptops: laptops.filter(l => l.currentRoutineStatus && l.currentRoutineStatus !== '').length,
+    unassignedLaptops: laptops.filter(l => !l.currentRoutineStatus || l.currentRoutineStatus === '').length,
+    activeUsers: laptops.filter(l => l.currentRoutineStatus && l.currentRoutineStatus !== '').length,
+    inRepair: 0, // Can be updated when repair tracking is added
+    availableForAssignment: laptops.filter(l => !l.currentRoutineStatus || l.currentRoutineStatus === '').length
+  };
 
   const statCards = [
     {
@@ -69,10 +96,25 @@ export default function Dashboard() {
     }
   ];
 
-  const utilizationRate = ((stats.assignedLaptops / stats.totalLaptops) * 100).toFixed(1);
+  const utilizationRate = stats.totalLaptops > 0 
+    ? ((stats.assignedLaptops / stats.totalLaptops) * 100).toFixed(1)
+    : 0;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <p className="text-red-700">{error}</p>
+        </div>
+      )}
       {/* Welcome Section */}
       <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg shadow-lg p-6 text-white">
         <div className="flex items-center justify-between">
