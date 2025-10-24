@@ -1,60 +1,104 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus, Edit2, CheckCircle, Search, X, UserPlus, RotateCcw } from 'lucide-react';
+import api from '../api/client';
 
 export default function AssignReturn() {
   const [assignments, setAssignments] = useState([]);
+  const [availableLaptops, setAvailableLaptops] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const [formData, setFormData] = useState({
     staffEntity: '',
     pcId: '',
-    collectLaptop: '',
     serialNumber: '',
     userName: '',
     remark: '',
     employeeId: '',
     email: '',
-    returnLaptop: '',
-    status: 'Assigned'
+    masterLaptop: null,  // Will store the full laptop object
+    collectLaptop: false,
+    returnLaptop: false
   });
+
+  // Fetch assignments and available laptops on mount
+  useEffect(() => {
+    fetchAssignments();
+    fetchAvailableLaptops();
+  }, []);
+
+  const fetchAssignments = async () => {
+    try {
+      setLoading(true);
+      const response = await api.get('/assignments');
+      setAssignments(response.data);
+      setError('');
+    } catch (err) {
+      console.error('Error fetching assignments:', err);
+      setError('Failed to load assignments');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchAvailableLaptops = async () => {
+    try {
+      const response = await api.get('/laptops');
+      // Filter laptops that have current staff (for display in table)
+      const assigned = response.data.filter(l => l.currentRoutineStatus && l.currentRoutineStatus !== '');
+      // Filter laptops that are available (for assignment dropdown)
+      const available = response.data.filter(l => !l.currentRoutineStatus || l.currentRoutineStatus === '');
+      setAvailableLaptops(available);
+    } catch (err) {
+      console.error('Error fetching laptops:', err);
+    }
+  };
 
   const resetForm = () => {
     setFormData({
       staffEntity: '',
       pcId: '',
-      collectLaptop: '',
       serialNumber: '',
       userName: '',
       remark: '',
       employeeId: '',
       email: '',
-      returnLaptop: '',
-      status: 'Assigned'
+      masterLaptop: null,
+      collectLaptop: false,
+      returnLaptop: false
     });
     setEditingId(null);
+    setError('');
   };
 
-  const handleSubmit = () => {
-    if (!formData.staffEntity || !formData.pcId || !formData.userName || !formData.employeeId || !formData.email) {
-      alert('Please fill in all required fields');
+  const handleSubmit = async () => {
+    if (!formData.staffEntity || !formData.userName || !formData.employeeId || !formData.email || !formData.masterLaptop) {
+      setError('Please fill in all required fields and select a laptop');
       return;
     }
 
-    if (editingId) {
-      setAssignments(assignments.map(assignment => 
-        assignment.id === editingId ? { ...formData, id: editingId } : assignment
-      ));
-    } else {
-      setAssignments([...assignments, { 
-        ...formData, 
-        id: Date.now(),
-        collectLaptop: new Date().toISOString().split('T')[0]
-      }]);
+    setLoading(true);
+    setError('');
+
+    try {
+      if (editingId) {
+        await api.put(`/assignments/${editingId}`, formData);
+      } else {
+        await api.post('/assignments', formData);
+      }
+      
+      await fetchAssignments();
+      await fetchAvailableLaptops();
+      setShowModal(false);
+      resetForm();
+    } catch (err) {
+      console.error('Error saving assignment:', err);
+      setError(err.response?.data?.message || 'Failed to save assignment');
+    } finally {
+      setLoading(false);
     }
-    
-    setShowModal(false);
-    resetForm();
   };
 
   const handleEdit = (assignment) => {
@@ -63,32 +107,60 @@ export default function AssignReturn() {
     setShowModal(true);
   };
 
-  const handleReturn = (id) => {
-    if (window.confirm('Mark this laptop as returned?')) {
-      setAssignments(assignments.map(assignment => 
-        assignment.id === id 
-          ? { 
-              ...assignment, 
-              returnLaptop: new Date().toISOString().split('T')[0],
-              status: 'Returned'
-            } 
-          : assignment
-      ));
+  const handleReturn = async (id) => {
+    if (window.confirm('Mark this laptop as returned? This will make the laptop available for new assignments.')) {
+      setLoading(true);
+      try {
+        await api.put(`/assignments/${id}/return`);
+        await fetchAssignments();
+        await fetchAvailableLaptops();
+        setError('');
+      } catch (err) {
+        console.error('Error returning laptop:', err);
+        setError('Failed to return laptop');
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
   const handleChange = (e) => {
+    const { name, value } = e.target;
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value
+      [name]: value
     });
   };
 
-  const filteredAssignments = assignments.filter(assignment =>
-    Object.values(assignment).some(value =>
-      value.toString().toLowerCase().includes(searchTerm.toLowerCase())
-    )
-  );
+  const handleLaptopSelect = (e) => {
+    const laptopId = e.target.value;
+    if (laptopId) {
+      const laptop = availableLaptops.find(l => l.id === parseInt(laptopId));
+      if (laptop) {
+        setFormData({
+          ...formData,
+          masterLaptop: laptop,  // Store full laptop object
+          pcId: laptop.pcId,
+          serialNumber: laptop.serialNumber
+        });
+      }
+    } else {
+      setFormData({
+        ...formData,
+        masterLaptop: null,
+        pcId: '',
+        serialNumber: ''
+      });
+    }
+  };
+
+  const filteredAssignments = assignments.filter(assignment => {
+    if (searchTerm === '') return true;
+    return Object.values(assignment).some(value => {
+      if (value === null || value === undefined) return false;
+      return value.toString().toLowerCase().includes(searchTerm.toLowerCase());
+    });
+  });
 
   const activeAssignments = assignments.filter(a => a.status === 'Assigned').length;
   const returnedAssignments = assignments.filter(a => a.status === 'Returned').length;
@@ -145,36 +217,41 @@ export default function AssignReturn() {
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee ID</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User Name</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned At</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee ID</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Model</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">PC ID</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Remark</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Returned At</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Serial Number</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Collect Date</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Return Date</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Staff Entity</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User Name</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredAssignments.length === 0 ? (
                 <tr>
-                  <td colSpan="9" className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan="14" className="px-6 py-12 text-center text-gray-500">
                     No assignments found. Click Assign Laptop to get started.
                   </td>
                 </tr>
               ) : (
                 filteredAssignments.map((assignment) => (
                   <tr key={assignment.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{assignment.employeeId}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{assignment.userName}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{assignment.id}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{assignment.assignedAt || '-'}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{assignment.email}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{assignment.employeeId}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{assignment.model || '-'}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{assignment.pcId}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{assignment.remark || '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{assignment.returnedAt || '-'}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{assignment.serialNumber}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{assignment.collectLaptop}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {assignment.returnLaptop || '-'}
-                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{assignment.staffEntity || '-'}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
                         assignment.status === 'Assigned' 
@@ -184,6 +261,7 @@ export default function AssignReturn() {
                         {assignment.status}
                       </span>
                     </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{assignment.userName}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <button
                         onClick={() => handleEdit(assignment)}
@@ -229,7 +307,57 @@ export default function AssignReturn() {
             </div>
 
             <div className="p-6">
+              {error && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                  {error}
+                </div>
+              )}
+              
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {!editingId && (
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Select Available Laptop *</label>
+                    <select
+                      onChange={handleLaptopSelect}
+                      value={formData.masterLaptop?.id || ''}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      required
+                    >
+                      <option value="">-- Select a laptop --</option>
+                      {availableLaptops.map(laptop => (
+                        <option key={laptop.id} value={laptop.id}>
+                          {laptop.pcId} - {laptop.model} ({laptop.serialNumber})
+                        </option>
+                      ))}
+                    </select>
+                    {availableLaptops.length === 0 && (
+                      <p className="mt-1 text-sm text-orange-600">No available laptops. All laptops are currently assigned.</p>
+                    )}
+                  </div>
+                )}
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">PC ID</label>
+                  <input
+                    type="text"
+                    name="pcId"
+                    value={formData.pcId}
+                    readOnly
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Serial Number</label>
+                  <input
+                    type="text"
+                    name="serialNumber"
+                    value={formData.serialNumber}
+                    readOnly
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
+                  />
+                </div>
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Staff Entity *</label>
                   <input
@@ -278,31 +406,6 @@ export default function AssignReturn() {
                     onChange={handleChange}
                     placeholder="e.g., john@company.com"
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">PC ID *</label>
-                  <input
-                    type="text"
-                    name="pcId"
-                    value={formData.pcId}
-                    onChange={handleChange}
-                    placeholder="e.g., PC-001"
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Serial Number</label>
-                  <input
-                    type="text"
-                    name="serialNumber"
-                    value={formData.serialNumber}
-                    onChange={handleChange}
-                    placeholder="e.g., SN123456789"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
