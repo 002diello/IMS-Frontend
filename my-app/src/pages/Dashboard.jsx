@@ -4,38 +4,43 @@ import api from '../api/client';
 
 export default function Dashboard() {
   const [laptops, setLaptops] = useState([]);
+  const [repairs, setRepairs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // Fetch laptops data from backend
+  // Fetch laptops and repairs data from backend
   useEffect(() => {
-    fetchLaptops();
+    fetchData();
     
     // Auto-refresh every 30 seconds
-    const interval = setInterval(fetchLaptops, 30000);
+    const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
   }, []);
 
-  const fetchLaptops = async () => {
+  const fetchData = async () => {
     try {
-      const response = await api.get('/laptops');
-      setLaptops(response.data);
+      const [laptopsResponse, repairsResponse] = await Promise.all([
+        api.get('/laptops'),
+        api.get('/repairs')
+      ]);
+      setLaptops(laptopsResponse.data);
+      setRepairs(repairsResponse.data);
       setError('');
     } catch (err) {
-      console.error('Error fetching laptops:', err);
+      console.error('Error fetching dashboard data:', err);
       setError('Failed to load dashboard data');
     } finally {
       setLoading(false);
     }
   };
 
-  // Calculate real-time stats from laptop data
+  // Calculate real-time stats from laptop and repair data
   const stats = {
     totalLaptops: laptops.length,
     assignedLaptops: laptops.filter(l => l.currentRoutineStatus && l.currentRoutineStatus !== '').length,
     unassignedLaptops: laptops.filter(l => !l.currentRoutineStatus || l.currentRoutineStatus === '').length,
     activeUsers: laptops.filter(l => l.currentRoutineStatus && l.currentRoutineStatus !== '').length,
-    inRepair: 0, // Can be updated when repair tracking is added
+    inRepair: repairs.filter(r => r.status === 'Pending' || r.status === 'In Progress').length, // Count active repairs
     availableForAssignment: laptops.filter(l => !l.currentRoutineStatus || l.currentRoutineStatus === '').length
   };
 
