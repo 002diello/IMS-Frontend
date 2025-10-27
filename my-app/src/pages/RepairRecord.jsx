@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useSearchParams } from 'react-router-dom';
 import { Plus, Edit2, Trash2, Search, X, Wrench } from 'lucide-react';
 import api from '../api/client';
 
 export default function RepairRecord() {
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const [repairs, setRepairs] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -43,24 +44,58 @@ export default function RepairRecord() {
     fetchRepairs();
   }, []);
 
-  // Check for laptop data from navigation state
+  // Check for laptop data from navigation state or URL parameter
   useEffect(() => {
-    if (location.state?.laptopData) {
-      const laptopData = location.state.laptopData;
-      setFormData({
-        entity: laptopData.entity || '',
-        date: new Date().toISOString().split('T')[0], // Today's date
-        model: laptopData.model || '',
-        serialNumber: laptopData.serialNumber || '',
-        pcId: laptopData.pcId || '',
-        partReplaced: '',
-        po: '',
-        remarks: `Repair request for ${laptopData.model} (${laptopData.pcId})`,
-        status: 'Pending'
-      });
-      setShowModal(true);
-    }
-  }, [location.state]);
+    const handleLaptopData = async () => {
+      // Handle location state (from Master Laptop)
+      if (location.state?.laptopData) {
+        const laptopData = location.state.laptopData;
+        setFormData({
+          entity: laptopData.entity || '',
+          date: new Date().toISOString().split('T')[0], // Today's date
+          model: laptopData.model || '',
+          serialNumber: laptopData.serialNumber || '',
+          pcId: laptopData.pcId || '',
+          partReplaced: '',
+          po: '',
+          remarks: `Repair request for ${laptopData.model} (${laptopData.pcId})`,
+          status: 'Pending'
+        });
+        setShowModal(true);
+        return;
+      }
+
+      // Handle URL parameter (from Return Leasing)
+      const laptopId = searchParams.get('laptop');
+      if (laptopId) {
+        try {
+          setLoading(true);
+          const response = await api.get(`/laptops/${laptopId}`);
+          const laptop = response.data;
+          
+          setFormData({
+            entity: laptop.staffCompany || 'IT Department',
+            date: new Date().toISOString().split('T')[0], // Today's date
+            model: laptop.model || '',
+            serialNumber: laptop.serialNumber || '',
+            pcId: laptop.pcId || '',
+            partReplaced: '',
+            po: '',
+            remarks: `Repair request for ${laptop.model} (${laptop.pcId}) - Leasing expiration approaching`,
+            status: 'Pending'
+          });
+          setShowModal(true);
+        } catch (err) {
+          console.error('Error fetching laptop data:', err);
+          setError('Failed to load laptop data');
+        } finally {
+          setLoading(false);
+        }
+      }
+    };
+
+    handleLaptopData();
+  }, [location.state, searchParams]);
 
   const fetchRepairs = async () => {
     try {
