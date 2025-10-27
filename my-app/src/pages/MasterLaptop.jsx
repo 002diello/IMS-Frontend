@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Edit2, Trash2, Search, X, Upload, Download } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Plus, Edit2, Trash2, Search, X, Upload, Download, Wrench } from 'lucide-react';
 import api from '../api/client';
 import * as XLSX from 'xlsx';
 
 export default function MasterLaptop() {
+  const navigate = useNavigate();
   const [laptops, setLaptops] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -27,6 +29,7 @@ export default function MasterLaptop() {
     staffCompany: '',
     employeeNo: '',
     joinDate: '',
+    collectDate: '',
     lastWorkingDay: '',
     remark: ''
   });
@@ -46,6 +49,7 @@ export default function MasterLaptop() {
       staffCompany: '',
       employeeNo: '',
       joinDate: '',
+      collectDate: '',
       lastWorkingDay: '',
       remark: ''
     });
@@ -94,6 +98,50 @@ export default function MasterLaptop() {
       setError(err.response?.data?.message || 'Failed to save laptop');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRepair = async (laptop) => {
+    if (window.confirm(`Send ${laptop.model} (${laptop.pcId}) for repair?`)) {
+      try {
+        setLoading(true);
+
+        // Create repair record directly
+        const repairData = {
+          entity: laptop.staffCompany || 'IT Department',
+          date: new Date().toISOString().split('T')[0], // Today's date
+          model: laptop.model,
+          serialNumber: laptop.serialNumber,
+          pcId: laptop.pcId,
+          partReplaced: '',
+          po: '',
+          remarks: `Repair initiated for ${laptop.model} (${laptop.pcId})`,
+          status: 'Pending'
+        };
+
+        await api.post('/repairs', repairData);
+
+        // Show success message
+        alert(`Repair record created successfully!\n\nLaptop: ${laptop.model} (${laptop.pcId})\nStatus: Pending\n\nNavigate to Repair Record page to complete details.`);
+
+        // Navigate to repair record page with laptop data for further editing
+        navigate('/repair-record', {
+          state: {
+            laptopData: {
+              model: laptop.model,
+              serialNumber: laptop.serialNumber,
+              pcId: laptop.pcId,
+              entity: laptop.staffCompany || 'IT Department'
+            }
+          }
+        });
+
+      } catch (err) {
+        console.error('Error creating repair record:', err);
+        alert('Failed to create repair record. Please try again.');
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
@@ -185,6 +233,7 @@ export default function MasterLaptop() {
         staffCompany: row['Staff Company'] || row['staffCompany'] || '',
         employeeNo: row['Employee No'] || row['employeeNo'] || '',
         joinDate: convertDateFormat(row['Join Date'] || row['joinDate'] || ''),
+        collectDate: convertDateFormat(row['Collect Date'] || row['collectDate'] || ''),
         lastWorkingDay: convertDateFormat(row['Last Working Day'] || row['lastWorkingDay'] || ''),
         remark: row['Remark'] || row['remark'] || ''
       }));
@@ -239,6 +288,7 @@ export default function MasterLaptop() {
         'Staff Company': 'ABC Corporation',
         'Employee No': 'EMP001',
         'Join Date': '15/1/2024',
+        'Collect Date': '20/1/2024',
         'Last Working Day': '',
         'Remark': 'Sample laptop entry'
       }
@@ -440,12 +490,21 @@ export default function MasterLaptop() {
                       <button
                         onClick={() => handleEdit(laptop)}
                         className="text-blue-600 hover:text-blue-900 mr-3"
+                        title="Edit"
                       >
                         <Edit2 size={18} />
                       </button>
                       <button
+                        onClick={() => handleRepair(laptop)}
+                        className="text-orange-600 hover:text-orange-900 mr-3"
+                        title="Send to Repair"
+                      >
+                        <Wrench size={18} />
+                      </button>
+                      <button
                         onClick={() => handleDelete(laptop.id)}
                         className="text-red-600 hover:text-red-900"
+                        title="Delete"
                       >
                         <Trash2 size={18} />
                       </button>
@@ -634,6 +693,17 @@ export default function MasterLaptop() {
                     type="date"
                     name="joinDate"
                     value={formData.joinDate}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Collect Date</label>
+                  <input
+                    type="date"
+                    name="collectDate"
+                    value={formData.collectDate}
                     onChange={handleChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
