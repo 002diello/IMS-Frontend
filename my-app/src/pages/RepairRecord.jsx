@@ -1,11 +1,16 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Plus, Edit2, Trash2, Search, X, Wrench } from 'lucide-react';
+import api from '../api/client';
 
 export default function RepairRecord() {
+  const location = useLocation();
   const [repairs, setRepairs] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const [formData, setFormData] = useState({
     entity: '',
     date: '',
@@ -33,22 +38,72 @@ export default function RepairRecord() {
     setEditingId(null);
   };
 
-  const handleSubmit = () => {
+  // Fetch repairs on component mount
+  useEffect(() => {
+    fetchRepairs();
+  }, []);
+
+  // Check for laptop data from navigation state
+  useEffect(() => {
+    if (location.state?.laptopData) {
+      const laptopData = location.state.laptopData;
+      setFormData({
+        entity: laptopData.entity || '',
+        date: new Date().toISOString().split('T')[0], // Today's date
+        model: laptopData.model || '',
+        serialNumber: laptopData.serialNumber || '',
+        pcId: laptopData.pcId || '',
+        partReplaced: '',
+        po: '',
+        remarks: `Repair request for ${laptopData.model} (${laptopData.pcId})`,
+        status: 'Pending'
+      });
+      setShowModal(true);
+    }
+  }, [location.state]);
+
+  const fetchRepairs = async () => {
+    try {
+      setLoading(true);
+      const response = await api.get('/repairs');
+      setRepairs(response.data);
+      setError('');
+    } catch (err) {
+      console.error('Error fetching repairs:', err);
+      setError('Failed to load repair records');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmit = async () => {
     if (!formData.entity || !formData.date || !formData.model || !formData.serialNumber || !formData.pcId) {
       alert('Please fill in all required fields');
       return;
     }
 
-    if (editingId) {
-      setRepairs(repairs.map(repair => 
-        repair.id === editingId ? { ...formData, id: editingId } : repair
-      ));
-    } else {
-      setRepairs([...repairs, { ...formData, id: Date.now() }]);
+    setLoading(true);
+    setError('');
+
+    try {
+      if (editingId) {
+        // Update existing repair
+        await api.put(`/repairs/${editingId}`, formData);
+      } else {
+        // Create new repair
+        await api.post('/repairs', formData);
+      }
+      
+      // Refresh the list
+      await fetchRepairs();
+      setShowModal(false);
+      resetForm();
+    } catch (err) {
+      console.error('Error saving repair:', err);
+      setError(err.response?.data?.message || 'Failed to save repair record');
+    } finally {
+      setLoading(false);
     }
-    
-    setShowModal(false);
-    resetForm();
   };
 
   const handleEdit = (repair) => {
@@ -57,9 +112,19 @@ export default function RepairRecord() {
     setShowModal(true);
   };
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this repair record?')) {
-      setRepairs(repairs.filter(repair => repair.id !== id));
+      try {
+        setLoading(true);
+        await api.delete(`/repairs/${id}`);
+        await fetchRepairs();
+        setError('');
+      } catch (err) {
+        console.error('Error deleting repair:', err);
+        setError('Failed to delete repair record');
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
@@ -111,6 +176,12 @@ export default function RepairRecord() {
           />
         </div>
       </div>
+
+      {error && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+          {error}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-lg shadow p-4">
@@ -342,17 +413,20 @@ export default function RepairRecord() {
                   onClick={() => {
                     setShowModal(false);
                     resetForm();
+                    setError('');
                   }}
-                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                  disabled={loading}
+                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
                   onClick={handleSubmit}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  disabled={loading}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-blue-400 disabled:cursor-not-allowed"
                 >
-                  {editingId ? 'Update' : 'Add'} Repair Record
+                  {loading ? 'Saving...' : editingId ? 'Update' : 'Add'} Repair Record
                 </button>
               </div>
             </div>
